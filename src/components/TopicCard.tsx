@@ -22,6 +22,7 @@ export function TopicCard({ topic, width, onPress, onEditPress }: TopicCardProps
     <Pressable
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityLabel={`${topic.title}, ${topic.cardCount} ${cardLabel}`}
+      accessibilityHint={onPress ? 'Starts a matching game' : undefined}
       onPress={onPress}
       disabled={!onPress}
       style={({ pressed }) => [styles.card, { width }, pressed && styles.pressed]}

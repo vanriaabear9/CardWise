@@ -1,5 +1,7 @@
 export { CreateScreen } from './CreateScreen';
 export { EditTopicScreen } from './EditTopicScreen';
+export { GameResultsScreen } from './GameResultsScreen';
+export { GameScreen } from './GameScreen';
 export { HistoryScreen } from './HistoryScreen';
 export { HomeScreen } from './HomeScreen';
 export { ProfileScreen } from './ProfileScreen';

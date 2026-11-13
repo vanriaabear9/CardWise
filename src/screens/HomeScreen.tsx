@@ -104,6 +104,9 @@ export function HomeScreen() {
         <TopicCarousel
           topics={visibleTopics}
           emptyMessage={topicsEmptyMessage}
+          onTopicPress={(topic) =>
+            router.push({ pathname: '/game/[topicId]', params: { topicId: String(topic.id) } })
+          }
           onTopicEdit={(topic) =>
             router.push({ pathname: '/topic/[id]/edit', params: { id: String(topic.id) } })
           }
