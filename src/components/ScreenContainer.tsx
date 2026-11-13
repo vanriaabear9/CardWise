@@ -19,6 +19,8 @@ export function ScreenContainer({ children }: ScreenContainerProps) {
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets // iOS: keep the focused field above the keyboard
         showsVerticalScrollIndicator={false}
       >
         {children}

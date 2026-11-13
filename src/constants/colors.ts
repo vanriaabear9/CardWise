@@ -22,6 +22,10 @@ export const colors = {
 
   // Translucent purple for icon badges / chips (no glow, just a soft fill)
   primaryMuted: 'rgba(139, 92, 246, 0.16)',
+
+  // Errors and destructive actions (validation messages, delete buttons)
+  danger: '#F87171',
+  dangerMuted: 'rgba(248, 113, 113, 0.14)',
 } as const;
 
 export type ColorName = keyof typeof colors;

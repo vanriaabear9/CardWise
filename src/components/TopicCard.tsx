@@ -4,14 +4,18 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, iconSize, radius, spacing, typography } from '@/constants';
 import type { TopicSummary } from '@/types';
 
+import { IconButton } from './IconButton';
+
 interface TopicCardProps {
   topic: TopicSummary;
   width: number;
   onPress?: () => void;
+  /** Shows a small edit (pencil) button when provided. */
+  onEditPress?: () => void;
 }
 
 /** Card showing a topic's title, short description, and number of flashcards. */
-export function TopicCard({ topic, width, onPress }: TopicCardProps) {
+export function TopicCard({ topic, width, onPress, onEditPress }: TopicCardProps) {
   const cardLabel = topic.cardCount === 1 ? 'card' : 'cards';
 
   return (
@@ -22,8 +26,18 @@ export function TopicCard({ topic, width, onPress }: TopicCardProps) {
       disabled={!onPress}
       style={({ pressed }) => [styles.card, { width }, pressed && styles.pressed]}
     >
-      <View style={styles.iconBadge}>
-        <Ionicons name="book-outline" size={iconSize.md} color={colors.secondary} />
+      <View style={styles.topRow}>
+        <View style={styles.iconBadge}>
+          <Ionicons name="book-outline" size={iconSize.md} color={colors.secondary} />
+        </View>
+        {onEditPress ? (
+          <IconButton
+            icon="pencil"
+            size={iconSize.sm}
+            accessibilityLabel={`Edit ${topic.title}`}
+            onPress={onEditPress}
+          />
+        ) : null}
       </View>
 
       <View style={styles.body}>
@@ -56,6 +70,11 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.8,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   iconBadge: {
     width: 40,

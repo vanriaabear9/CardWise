@@ -10,6 +10,8 @@ interface TopicCarouselProps {
   /** Text shown when there are no topics to display. */
   emptyMessage: string;
   onTopicPress?: (topic: TopicSummary) => void;
+  /** When provided, user-created topics show an edit button. Built-in topics never do. */
+  onTopicEdit?: (topic: TopicSummary) => void;
 }
 
 /** Card width: ~62% of the screen, kept between 200 and 280 for small and large phones. */
@@ -21,7 +23,12 @@ const MAX_CARD_WIDTH = 280;
  * Horizontally scrolling row of topic cards.
  * Extends to the screen edges so cards can scroll past the side padding.
  */
-export function TopicCarousel({ topics, emptyMessage, onTopicPress }: TopicCarouselProps) {
+export function TopicCarousel({
+  topics,
+  emptyMessage,
+  onTopicPress,
+  onTopicEdit,
+}: TopicCarouselProps) {
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = Math.min(
     MAX_CARD_WIDTH,
@@ -46,6 +53,7 @@ export function TopicCarousel({ topics, emptyMessage, onTopicPress }: TopicCarou
           topic={item}
           width={cardWidth}
           onPress={onTopicPress ? () => onTopicPress(item) : undefined}
+          onEditPress={onTopicEdit && !item.isBuiltin ? () => onTopicEdit(item) : undefined}
         />
       )}
       showsHorizontalScrollIndicator={false}

@@ -1,40 +1,66 @@
-import { Pressable, StyleProp, StyleSheet, Text, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { colors, iconSize, radius, spacing } from '@/constants';
 import type { IconName } from '@/types';
 
-type ButtonVariant = 'primary' | 'secondary';
+type ButtonVariant = 'primary' | 'secondary' | 'danger';
 
 interface AppButtonProps {
   label: string;
   onPress?: () => void;
   icon?: IconName;
   variant?: ButtonVariant;
+  /** Greys the button out and ignores taps. */
+  disabled?: boolean;
+  /** Shows a spinner instead of the icon and ignores taps (e.g. while saving). */
+  loading?: boolean;
   style?: StyleProp<ViewStyle>;
 }
+
+const CONTENT_COLOR: Record<ButtonVariant, string> = {
+  primary: colors.textPrimary,
+  secondary: colors.secondary,
+  danger: colors.danger,
+};
 
 /**
  * Rounded button.
  * - primary: solid purple, for the main action on a screen.
  * - secondary: outlined lavender, for supporting actions.
+ * - danger: outlined red, for destructive actions (e.g. delete).
  */
-export function AppButton({ label, onPress, icon, variant = 'primary', style }: AppButtonProps) {
-  const isPrimary = variant === 'primary';
-  const contentColor = isPrimary ? colors.textPrimary : colors.secondary;
+export function AppButton({
+  label,
+  onPress,
+  icon,
+  variant = 'primary',
+  disabled = false,
+  loading = false,
+  style,
+}: AppButtonProps) {
+  const contentColor = CONTENT_COLOR[variant];
+  const inactive = disabled || loading;
 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled: inactive, busy: loading }}
       onPress={onPress}
+      disabled={inactive}
       style={({ pressed }) => [
         styles.base,
-        isPrimary ? styles.primary : styles.secondary,
+        styles[variant],
         pressed && styles.pressed,
+        disabled && styles.disabled,
         style,
       ]}
     >
-      {icon ? <Ionicons name={icon} size={iconSize.md} color={contentColor} /> : null}
+      {loading ? (
+        <ActivityIndicator size="small" color={contentColor} />
+      ) : icon ? (
+        <Ionicons name={icon} size={iconSize.md} color={contentColor} />
+      ) : null}
       <Text style={[styles.label, { color: contentColor }]}>{label}</Text>
     </Pressable>
   );
@@ -58,8 +84,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.secondary,
   },
+  danger: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
   pressed: {
     opacity: 0.8,
+  },
+  disabled: {
+    opacity: 0.5,
   },
   label: {
     fontSize: 15,

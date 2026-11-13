@@ -1,4 +1,4 @@
-import type { NewTermInput, TermWithDescriptions } from './term';
+import type { EditTermInput, NewTermInput, TermWithDescriptions } from './term';
 
 /** A study topic (a set of flashcards). */
 export interface Topic {
@@ -28,6 +28,19 @@ export interface NewTopicInput {
   description?: string;
   category?: string;
   terms?: NewTermInput[];
+}
+
+/**
+ * The complete new state of an edited topic.
+ * Terms/descriptions with an `id` are updated, ones without are added,
+ * and existing ones missing from the list are deleted.
+ */
+export interface TopicEditInput {
+  title: string;
+  description?: string;
+  /** Omit to keep the current category. */
+  category?: string;
+  terms: EditTermInput[];
 }
 
 /** Fields that can be changed on an existing topic. Omitted fields stay unchanged. */

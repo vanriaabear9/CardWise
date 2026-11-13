@@ -101,7 +101,13 @@ export function HomeScreen() {
         {isSearching ? null : (
           <SegmentedTabs options={TOPIC_TABS} value={topicTab} onChange={setTopicTab} />
         )}
-        <TopicCarousel topics={visibleTopics} emptyMessage={topicsEmptyMessage} />
+        <TopicCarousel
+          topics={visibleTopics}
+          emptyMessage={topicsEmptyMessage}
+          onTopicEdit={(topic) =>
+            router.push({ pathname: '/topic/[id]/edit', params: { id: String(topic.id) } })
+          }
+        />
       </Section>
 
       <Section

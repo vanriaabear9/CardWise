@@ -5,6 +5,7 @@ import type {
   NewTermInput,
   NewTopicInput,
   Topic,
+  TopicEditInput,
   TopicSummary,
   TopicUpdate,
   TopicWithTerms,
@@ -297,6 +298,159 @@ export async function deleteTopic(db: SQLiteDatabase, topicId: number): Promise<
   if (result.changes === 0) {
     throw new NotFoundError('Topic not found.');
   }
+  notifyDataChanged();
+}
+
+/** Throws if the same id appears twice in an edit (would make the result ambiguous). */
+function assertUniqueIds(ids: number[], label: string): void {
+  if (new Set(ids).size !== ids.length) {
+    throw new ValidationError(`The same ${label} appears more than once.`);
+  }
+}
+
+/**
+ * Saves an edited topic — its fields, terms, and descriptions — in ONE transaction.
+ *
+ * - Terms/descriptions WITH an id are updated (they keep their id).
+ * - Terms/descriptions WITHOUT an id are inserted.
+ * - Existing terms/descriptions that are missing from `input` are deleted.
+ * - Display order (position) is rewritten to match the order in `input`.
+ *
+ * If anything fails, the whole edit is rolled back and the topic stays as it was.
+ */
+export async function updateTopicWithTerms(
+  db: SQLiteDatabase,
+  topicId: number,
+  input: TopicEditInput,
+): Promise<void> {
+  requireId(topicId, 'topic');
+
+  // Validate everything before touching the database.
+  const title = requireText(input.title, 'Topic title', LIMITS.topicTitle);
+  const description = optionalText(input.description, 'Topic description', LIMITS.topicDescription);
+  const category =
+    input.category === undefined
+      ? undefined
+      : optionalText(input.category, 'Category', LIMITS.category) || DEFAULT_CATEGORY;
+
+  const terms = input.terms.map((term, termIndex) => ({
+    id: term.id === undefined ? undefined : requireId(term.id, 'term'),
+    termText: requireText(term.termText, `Term ${termIndex + 1}`, LIMITS.termText),
+    descriptions: term.descriptions.map((desc, descriptionIndex) => ({
+      id: desc.id === undefined ? undefined : requireId(desc.id, 'description'),
+      text: requireText(
+        desc.descriptionText,
+        `Description ${descriptionIndex + 1} of term ${termIndex + 1}`,
+        LIMITS.descriptionText,
+      ),
+    })),
+  }));
+
+  const keptTermIds = terms.flatMap((term) => (term.id === undefined ? [] : [term.id]));
+  assertUniqueIds(keptTermIds, 'term');
+  assertUniqueIds(
+    terms.flatMap((term) => term.descriptions.flatMap((d) => (d.id === undefined ? [] : [d.id]))),
+    'description',
+  );
+
+  await db.withTransactionAsync(async () => {
+    // 1. Topic fields
+    const topicRow = await db.getFirstAsync<{ id: number }>('SELECT id FROM topics WHERE id = ?', [
+      topicId,
+    ]);
+    if (!topicRow) {
+      throw new NotFoundError('Topic not found. It may have been deleted.');
+    }
+    if (category === undefined) {
+      await db.runAsync(
+        'UPDATE topics SET title = ?, description = ?, updated_at = ? WHERE id = ?',
+        [title, description, nowIso(), topicId],
+      );
+    } else {
+      await db.runAsync(
+        'UPDATE topics SET title = ?, description = ?, category = ?, updated_at = ? WHERE id = ?',
+        [title, description, category, nowIso(), topicId],
+      );
+    }
+
+    // 2. Remove terms that were deleted in the form (their descriptions cascade).
+    const existingTermIds = new Set(
+      (
+        await db.getAllAsync<{ id: number }>('SELECT id FROM terms WHERE topic_id = ?', [topicId])
+      ).map((row) => row.id),
+    );
+    for (const id of keptTermIds) {
+      if (!existingTermIds.has(id)) {
+        throw new NotFoundError('A term in this topic no longer exists. Reopen the topic and try again.');
+      }
+    }
+    const keptTermIdSet = new Set(keptTermIds);
+    for (const id of existingTermIds) {
+      if (!keptTermIdSet.has(id)) {
+        await db.runAsync('DELETE FROM terms WHERE id = ?', [id]);
+      }
+    }
+
+    // 3. Update or insert each term, then sync its descriptions.
+    for (const [termPosition, term] of terms.entries()) {
+      let termId: number;
+      let existingDescriptionIds = new Set<number>();
+
+      if (term.id !== undefined) {
+        termId = term.id;
+        await db.runAsync('UPDATE terms SET term_text = ?, position = ? WHERE id = ?', [
+          term.termText,
+          termPosition,
+          termId,
+        ]);
+        existingDescriptionIds = new Set(
+          (
+            await db.getAllAsync<{ id: number }>('SELECT id FROM descriptions WHERE term_id = ?', [
+              termId,
+            ])
+          ).map((row) => row.id),
+        );
+      } else {
+        const result = await db.runAsync(
+          'INSERT INTO terms (topic_id, term_text, position) VALUES (?, ?, ?)',
+          [topicId, term.termText, termPosition],
+        );
+        termId = result.lastInsertRowId;
+      }
+
+      const keptDescriptionIds = new Set<number>();
+      for (const desc of term.descriptions) {
+        if (desc.id !== undefined) {
+          if (!existingDescriptionIds.has(desc.id)) {
+            throw new NotFoundError(
+              'A description in this topic no longer exists. Reopen the topic and try again.',
+            );
+          }
+          keptDescriptionIds.add(desc.id);
+        }
+      }
+      for (const id of existingDescriptionIds) {
+        if (!keptDescriptionIds.has(id)) {
+          await db.runAsync('DELETE FROM descriptions WHERE id = ?', [id]);
+        }
+      }
+
+      for (const [descriptionPosition, desc] of term.descriptions.entries()) {
+        if (desc.id !== undefined) {
+          await db.runAsync(
+            'UPDATE descriptions SET description_text = ?, position = ? WHERE id = ?',
+            [desc.text, descriptionPosition, desc.id],
+          );
+        } else {
+          await db.runAsync(
+            'INSERT INTO descriptions (term_id, description_text, position) VALUES (?, ?, ?)',
+            [termId, desc.text, descriptionPosition],
+          );
+        }
+      }
+    }
+  });
+
   notifyDataChanged();
 }
 

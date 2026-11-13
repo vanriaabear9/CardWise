@@ -1,67 +1,55 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
 
-import {
-  AppButton,
-  AppTextInput,
-  Card,
-  ScreenContainer,
-  ScreenHeader,
-  Section,
-} from '@/components';
-import { spacing, typography } from '@/constants';
+import { ScreenContainer, ScreenHeader, TopicForm } from '@/components';
+import { useTopicDraft } from '@/hooks/useTopicDraft';
+import { getErrorMessage } from '@/services/errors';
+import { createTopic } from '@/services/topicService';
+import { createEmptyDraft, draftToNewTopicInput } from '@/utils/topicDraft';
 
 /**
- * Placeholder layout for creating a topic.
- * Inputs and buttons are visual only; saving will be added with the database.
+ * Create a new topic with terms and descriptions.
+ * The form is kept in local state; it is saved to SQLite (in one transaction) only on "Save Topic".
  */
 export function CreateScreen() {
+  const db = useSQLiteContext();
+  const { draft, dispatch, errors, visibleErrors, showErrors, reset } = useTopicDraft(createEmptyDraft);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (saving) {
+      return;
+    }
+    if (errors.count > 0) {
+      showErrors();
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const input = draftToNewTopicInput(draft);
+      await createTopic(db, input);
+      reset(createEmptyDraft());
+      Alert.alert('Topic saved', `"${input.title}" was added to My Topics on the Home screen.`);
+    } catch (error) {
+      Alert.alert('Could not save topic', `${getErrorMessage(error)}\n\nYour entries are still here, so you can try again.`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <ScreenContainer>
       <ScreenHeader title="Create Topic" subtitle="Build your own set of flashcards." />
-
-      <Section title="Topic Title" icon="bookmark-outline">
-        <AppTextInput placeholder="e.g. Biology Basics" />
-      </Section>
-
-      <Section
-        title="Terms and Descriptions"
-        icon="list-outline"
-        description="Each term becomes one flashcard."
-      >
-        <Card>
-          <Text style={styles.cardLabel}>Card 1</Text>
-          <AppTextInput label="Term" placeholder="e.g. Photosynthesis" />
-          <AppTextInput
-            label="Description"
-            placeholder="e.g. How plants turn light into energy"
-            multiline
-          />
-        </Card>
-
-        <View style={styles.actionRow}>
-          <AppButton label="Add Term" icon="add" variant="secondary" style={styles.flexButton} />
-          <AppButton
-            label="Add Description"
-            icon="document-text-outline"
-            variant="secondary"
-            style={styles.flexButton}
-          />
-        </View>
-      </Section>
-
-      <AppButton label="Save Topic" icon="checkmark" />
+      <TopicForm
+        draft={draft}
+        dispatch={dispatch}
+        errors={visibleErrors}
+        onSave={handleSave}
+        saving={saving}
+        saveLabel="Save Topic"
+      />
     </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  cardLabel: typography.label,
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  flexButton: {
-    flexGrow: 1,
-  },
-});

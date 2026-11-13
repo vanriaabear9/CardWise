@@ -14,6 +14,19 @@ export interface TermWithDescriptions extends Term {
   descriptions: Description[];
 }
 
+/** A description when saving an edited topic. `id` is set for descriptions that already exist. */
+export interface EditDescriptionInput {
+  id?: number;
+  descriptionText: string;
+}
+
+/** A term when saving an edited topic. `id` is set for terms that already exist. */
+export interface EditTermInput {
+  id?: number;
+  termText: string;
+  descriptions: EditDescriptionInput[];
+}
+
 /** Data needed to create a term (used when saving a topic). */
 export interface NewTermInput {
   termText: string;
