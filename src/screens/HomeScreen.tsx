@@ -1,83 +1,137 @@
-import { StyleSheet, Text, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import {
-  AppButton,
+  ActionCard,
   AppTextInput,
-  Card,
+  BrandHeader,
   EmptyState,
+  ListItem,
   ScreenContainer,
-  ScreenHeader,
   Section,
+  SegmentedTabs,
+  TopicCarousel,
+  WelcomeBanner,
 } from '@/components';
-import { colors, iconSize, spacing, typography } from '@/constants';
-import type { IconName } from '@/types';
+import type { SegmentOption } from '@/components';
+import { spacing } from '@/constants';
+import { SAMPLE_EXPLORE_TOPICS, SAMPLE_MY_TOPICS, SAMPLE_RECENT_GAMES } from '@/data/sampleData';
+import { formatShortDate } from '@/utils/formatDate';
 
-/** Placeholder categories for the "Explore Topics" section (no real content yet). */
-const EXPLORE_CATEGORIES: { title: string; icon: IconName }[] = [
-  { title: 'Science', icon: 'flask-outline' },
-  { title: 'History', icon: 'library-outline' },
-  { title: 'Languages', icon: 'language-outline' },
-  { title: 'Math', icon: 'calculator-outline' },
+type TopicTab = 'explore' | 'mine';
+
+const TOPIC_TABS: SegmentOption<TopicTab>[] = [
+  { value: 'explore', label: 'Explore Topics' },
+  { value: 'mine', label: 'My Topics' },
 ];
+
+/** How many recent games to preview on Home; the full list lives in History. */
+const RECENT_GAMES_PREVIEW_COUNT = 3;
 
 export function HomeScreen() {
   const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [topicTab, setTopicTab] = useState<TopicTab>('explore');
+
+  const trimmedQuery = searchQuery.trim();
+  const isSearching = trimmedQuery.length > 0;
+
+  // While searching, look through ALL topics (Explore + My Topics);
+  // otherwise show only the selected tab.
+  const visibleTopics = useMemo(() => {
+    if (isSearching) {
+      const query = trimmedQuery.toLowerCase();
+      return [...SAMPLE_EXPLORE_TOPICS, ...SAMPLE_MY_TOPICS].filter((topic) =>
+        topic.title.toLowerCase().includes(query),
+      );
+    }
+    return topicTab === 'explore' ? SAMPLE_EXPLORE_TOPICS : SAMPLE_MY_TOPICS;
+  }, [isSearching, trimmedQuery, topicTab]);
+
+  const topicsEmptyMessage = isSearching
+    ? `No topics match "${trimmedQuery}".`
+    : topicTab === 'mine'
+      ? "You haven't created any topics yet."
+      : 'No topics to explore yet.';
+
+  const recentGames = SAMPLE_RECENT_GAMES.slice(0, RECENT_GAMES_PREVIEW_COUNT);
 
   return (
     <ScreenContainer>
-      <ScreenHeader title="CardWise" subtitle="Learn with flashcards, anytime — even offline." />
+      <View style={styles.topGroup}>
+        {/* Settings screen doesn't exist yet; the button is a placeholder. */}
+        <BrandHeader />
 
-      <Section title="Explore Topics" icon="compass-outline" description="Browse ready-made topics.">
-        <View style={styles.grid}>
-          {EXPLORE_CATEGORIES.map((category) => (
-            <Card key={category.title} style={styles.categoryCard}>
-              <Ionicons name={category.icon} size={iconSize.lg} color={colors.secondary} />
-              <Text style={styles.categoryTitle}>{category.title}</Text>
-            </Card>
-          ))}
-        </View>
-      </Section>
-
-      <Section title="My Topics" icon="albums-outline" description="Topics you have created.">
-        <EmptyState
-          icon="albums-outline"
-          title="No topics yet"
-          message="Create your first topic to start studying."
-        >
-          <AppButton
-            label="Create a topic"
-            icon="add"
-            onPress={() => router.navigate('/create')}
-          />
-        </EmptyState>
-      </Section>
-
-      <Section title="Search Topics" icon="search-outline">
-        <AppTextInput icon="search-outline" placeholder="Search topics..." returnKeyType="search" />
-      </Section>
-
-      <Section title="Recently Played" icon="play-circle-outline">
-        <EmptyState
-          icon="play-circle-outline"
-          title="Nothing played yet"
-          message="Topics you play will appear here."
+        <AppTextInput
+          icon="search-outline"
+          placeholder="Search topics by title"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Search topics by title"
         />
+      </View>
+
+      <WelcomeBanner playerName="Player" message="Ready to sharpen your memory today?" />
+
+      <Section
+        title={isSearching ? 'Search Results' : 'Topics'}
+        icon={isSearching ? 'search-outline' : 'albums-outline'}
+      >
+        {isSearching ? null : (
+          <SegmentedTabs options={TOPIC_TABS} value={topicTab} onChange={setTopicTab} />
+        )}
+        <TopicCarousel topics={visibleTopics} emptyMessage={topicsEmptyMessage} />
       </Section>
+
+      <Section
+        title="Recently Played"
+        icon="play-circle-outline"
+        actionLabel="See All"
+        onActionPress={() => router.navigate('/history')}
+      >
+        {recentGames.length > 0 ? (
+          <View style={styles.list}>
+            {recentGames.map((game) => (
+              <ListItem
+                key={game.id}
+                icon="game-controller-outline"
+                title={game.topicTitle}
+                subtitle={`Played ${formatShortDate(game.playedAt)}`}
+                trailingText={`${game.score}/${game.totalQuestions}`}
+              />
+            ))}
+          </View>
+        ) : (
+          <EmptyState
+            icon="play-circle-outline"
+            title="Nothing played yet"
+            message="Topics you play will appear here."
+          />
+        )}
+      </Section>
+
+      <ActionCard
+        icon="create-outline"
+        title="Create a Topic"
+        message="Turn your notes into flashcards in a few steps."
+        actionLabel="Create Topic"
+        actionIcon="add"
+        onPress={() => router.navigate('/create')}
+      />
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  topGroup: {
+    gap: spacing.lg,
+  },
+  list: {
     gap: spacing.md,
   },
-  categoryCard: {
-    flexGrow: 1,
-    flexBasis: '40%',
-  },
-  categoryTitle: typography.subheading,
 });

@@ -21,9 +21,21 @@ export interface Term {
 export interface Topic {
   id: string;
   title: string;
+  description: string;
   terms: Term[];
   isFavorite: boolean;
   createdAt: string; // ISO date string
+}
+
+/**
+ * Lightweight topic info for lists and cards (no full term list).
+ * `cardCount` is the number of terms in the topic.
+ */
+export interface TopicSummary {
+  id: string;
+  title: string;
+  description: string;
+  cardCount: number;
 }
 
 /** The result of one finished game. */
