@@ -16,7 +16,8 @@ export function StatTile({ label, value, icon }: StatTileProps) {
     <View style={styles.tile}>
       <Ionicons name={icon} size={iconSize.md} color={colors.secondary} />
       <Text style={styles.value}>{value}</Text>
-      <Text style={styles.label} numberOfLines={1}>
+      {/* Two lines so labels like "Topics Created" aren't cut off on narrow phones. */}
+      <Text style={styles.label} numberOfLines={2}>
         {label}
       </Text>
     </View>

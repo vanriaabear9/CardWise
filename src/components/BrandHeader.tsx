@@ -22,7 +22,7 @@ export function BrandHeader({ onSettingsPress }: BrandHeaderProps) {
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Settings"
+        accessibilityLabel="Settings and profile"
         onPress={onSettingsPress}
         hitSlop={spacing.xs}
         style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}

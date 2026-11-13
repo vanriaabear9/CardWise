@@ -79,8 +79,8 @@ export function HomeScreen() {
   return (
     <ScreenContainer>
       <View style={styles.topGroup}>
-        {/* Settings screen doesn't exist yet; the button is a placeholder. */}
-        <BrandHeader />
+        {/* The gear opens Profile, where Settings (sound effects) and the profile menu live. */}
+        <BrandHeader onSettingsPress={() => router.navigate('/profile')} />
 
         <AppTextInput
           icon="search-outline"

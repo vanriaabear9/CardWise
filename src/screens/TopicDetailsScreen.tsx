@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
@@ -22,6 +22,21 @@ export function TopicDetailsScreen({ topicId }: { topicId: number }) {
     if (router.canGoBack()) router.back();
     else router.dismissTo('/');
   };
+
+  // If this topic is deleted while the screen is open (e.g. from its Edit screen),
+  // leave instead of showing "Topic not found".
+  const wasLoaded = useRef(false);
+  const leftAfterDelete = useRef(false);
+  useEffect(() => {
+    if (topic) {
+      wasLoaded.current = true;
+    } else if (wasLoaded.current && !isLoading && !error && !leftAfterDelete.current) {
+      leftAfterDelete.current = true;
+      goBack();
+    }
+    // goBack only uses the router; re-running on its identity isn't needed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic, isLoading, error]);
 
   if (isLoading && !topic) {
     return (
