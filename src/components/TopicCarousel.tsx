@@ -40,7 +40,7 @@ export function TopicCarousel({ topics, emptyMessage, onTopicPress }: TopicCarou
     <FlatList
       horizontal
       data={topics}
-      keyExtractor={(topic) => topic.id}
+      keyExtractor={(topic) => String(topic.id)}
       renderItem={({ item }) => (
         <TopicCard
           topic={item}

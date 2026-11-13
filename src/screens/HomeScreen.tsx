@@ -16,7 +16,8 @@ import {
 } from '@/components';
 import type { SegmentOption } from '@/components';
 import { spacing } from '@/constants';
-import { SAMPLE_EXPLORE_TOPICS, SAMPLE_MY_TOPICS, SAMPLE_RECENT_GAMES } from '@/data/sampleData';
+import { useRecentGames } from '@/hooks/useRecentGames';
+import { useBuiltinTopics, useUserTopics } from '@/hooks/useTopics';
 import { formatShortDate } from '@/utils/formatDate';
 
 type TopicTab = 'explore' | 'mine';
@@ -34,6 +35,11 @@ export function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [topicTab, setTopicTab] = useState<TopicTab>('explore');
 
+  // Live data from the local SQLite database (reloads automatically after any change).
+  const builtinTopics = useBuiltinTopics();
+  const userTopics = useUserTopics();
+  const recentGamesQuery = useRecentGames(RECENT_GAMES_PREVIEW_COUNT);
+
   const trimmedQuery = searchQuery.trim();
   const isSearching = trimmedQuery.length > 0;
 
@@ -42,20 +48,30 @@ export function HomeScreen() {
   const visibleTopics = useMemo(() => {
     if (isSearching) {
       const query = trimmedQuery.toLowerCase();
-      return [...SAMPLE_EXPLORE_TOPICS, ...SAMPLE_MY_TOPICS].filter((topic) =>
+      return [...builtinTopics.data, ...userTopics.data].filter((topic) =>
         topic.title.toLowerCase().includes(query),
       );
     }
-    return topicTab === 'explore' ? SAMPLE_EXPLORE_TOPICS : SAMPLE_MY_TOPICS;
-  }, [isSearching, trimmedQuery, topicTab]);
+    return topicTab === 'explore' ? builtinTopics.data : userTopics.data;
+  }, [isSearching, trimmedQuery, topicTab, builtinTopics.data, userTopics.data]);
 
-  const topicsEmptyMessage = isSearching
-    ? `No topics match "${trimmedQuery}".`
-    : topicTab === 'mine'
-      ? "You haven't created any topics yet."
-      : 'No topics to explore yet.';
+  const topicsLoading = builtinTopics.isLoading || userTopics.isLoading;
+  const topicsError = builtinTopics.error ?? userTopics.error;
 
-  const recentGames = SAMPLE_RECENT_GAMES.slice(0, RECENT_GAMES_PREVIEW_COUNT);
+  let topicsEmptyMessage: string;
+  if (topicsError) {
+    topicsEmptyMessage = `Couldn't load topics. ${topicsError}`;
+  } else if (topicsLoading) {
+    topicsEmptyMessage = 'Loading topics…';
+  } else if (isSearching) {
+    topicsEmptyMessage = `No topics match "${trimmedQuery}".`;
+  } else if (topicTab === 'mine') {
+    topicsEmptyMessage = "You haven't created any topics yet.";
+  } else {
+    topicsEmptyMessage = 'No topics to explore yet.';
+  }
+
+  const recentGames = recentGamesQuery.data;
 
   return (
     <ScreenContainer>
@@ -101,7 +117,7 @@ export function HomeScreen() {
                 key={game.id}
                 icon="game-controller-outline"
                 title={game.topicTitle}
-                subtitle={`Played ${formatShortDate(game.playedAt)}`}
+                subtitle={`Played ${formatShortDate(game.completedAt)}`}
                 trailingText={`${game.score}/${game.totalQuestions}`}
               />
             ))}
