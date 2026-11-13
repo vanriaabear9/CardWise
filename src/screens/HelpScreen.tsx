@@ -55,6 +55,7 @@ const HELP: HelpTopic[] = [
       'The description cards are in a pile at the bottom. Use ◀ ▶ to look through them.',
       'Press and drag the top card onto the term it describes.',
       'A wrong card flies back to the pile so you can try again. The game ends when every card is matched.',
+      'You hear a chime for a correct match, a soft "boop" for a wrong one, and a short tune when you finish. Turn sounds off in Profile → Settings.',
     ],
   },
   {

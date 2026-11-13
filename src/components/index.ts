@@ -22,6 +22,7 @@ export { ScreenContainer } from './ScreenContainer';
 export { ScreenHeader } from './ScreenHeader';
 export { Section } from './Section';
 export { SegmentedTabs } from './SegmentedTabs';
+export { SettingSwitch } from './SettingSwitch';
 export type { SegmentOption } from './SegmentedTabs';
 export { StatTile } from './StatTile';
 export { TermDropTarget } from './TermDropTarget';

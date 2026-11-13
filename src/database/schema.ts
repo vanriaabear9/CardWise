@@ -116,6 +116,18 @@ export const SCHEMA_V4_STATEMENTS = [
   );`,
 ];
 
+/**
+ * Schema version 5: app settings (e.g. sound effects on/off), one row per setting.
+ * A missing row means "use the default", so no rows are inserted here.
+ */
+export const SCHEMA_V5_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY NOT NULL,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );`,
+];
+
 /** All statements for schema version 1, in the order they must run. */
 export const SCHEMA_V1_STATEMENTS = [
   CREATE_TOPICS_TABLE,

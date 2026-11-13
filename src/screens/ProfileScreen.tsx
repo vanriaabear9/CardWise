@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 
 import {
@@ -9,10 +9,14 @@ import {
   ProgressBar,
   ScreenContainer,
   ScreenHeader,
+  Section,
+  SettingSwitch,
   StatTile,
 } from '@/components';
 import { colors, spacing, typography } from '@/constants';
 import { usePlayerStats, useProfile } from '@/hooks/useProfile';
+import { useSoundSetting } from '@/hooks/useSoundEffects';
+import { getErrorMessage } from '@/services/errors';
 import type { IconName } from '@/types';
 
 interface MenuEntry {
@@ -36,8 +40,15 @@ export function ProfileScreen() {
   const router = useRouter();
   const { data: profile } = useProfile();
   const { data: stats, error: statsError } = usePlayerStats();
+  const sound = useSoundSetting();
   const { level } = stats;
   const best = stats.bestGame;
+
+  const changeSound = (enabled: boolean) => {
+    sound.setEnabled(enabled).catch((error) =>
+      Alert.alert("Couldn't save the sound setting", getErrorMessage(error)),
+    );
+  };
 
   return (
     <ScreenContainer>
@@ -71,6 +82,17 @@ export function ProfileScreen() {
         <StatTile icon="albums-outline" label="Topics Created" value={String(stats.topicsCreated)} />
       </View>
       {statsError ? <Text style={styles.error}>Couldn't load statistics. {statsError}</Text> : null}
+
+      <Section title="Settings" icon="settings-outline">
+        <SettingSwitch
+          icon={sound.enabled ? 'volume-high-outline' : 'volume-mute-outline'}
+          title="Sound Effects"
+          subtitle={sound.enabled ? 'Sounds play during games' : 'Games are silent'}
+          value={sound.enabled}
+          onValueChange={changeSound}
+          disabled={sound.isLoading}
+        />
+      </Section>
 
       <View style={styles.menu}>
         {MENU.map((entry) => (

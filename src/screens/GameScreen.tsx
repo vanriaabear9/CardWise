@@ -16,6 +16,7 @@ import {
 } from '@/components';
 import type { FeedbackKind, TermFlash, WindowRect } from '@/components';
 import { colors, radius, spacing, typography } from '@/constants';
+import { useSoundEffects } from '@/hooks/useSoundEffects';
 import { getErrorMessage } from '@/services/errors';
 import { saveCompletedGame } from '@/services/gameHistoryService';
 import { getTopicWithTerms } from '@/services/topicService';
@@ -30,6 +31,7 @@ import {
   summarizeGame,
   summaryToParams,
 } from '@/utils/gameEngine';
+import { soundForDrop } from '@/utils/soundRules';
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -91,6 +93,7 @@ function measure(view: ViewHandle | null): Promise<Rect | null> {
 export function GameScreen({ topicId }: GameScreenProps) {
   const db = useSQLiteContext();
   const router = useRouter();
+  const sounds = useSoundEffects();
 
   const [loadState, setLoadState] = useState<LoadState>({ status: 'loading' });
   const [game, setGame] = useState<GameState | null>(null);
@@ -234,7 +237,8 @@ export function GameScreen({ topicId }: GameScreenProps) {
 
   useEffect(() => {
     if (!game?.completedAt || saveRequested.current) return;
-    saveRequested.current = true;
+    saveRequested.current = true; // guards the victory sound too: it can only ever play once
+    sounds.play('complete');
     showFeedback('correct', 'All descriptions matched! Saving your results…');
     void saveAndOpenResults(FINISH_DELAY_MS);
     // Runs once when the game becomes complete.
@@ -377,6 +381,11 @@ export function GameScreen({ topicId }: GameScreenProps) {
 
     const { state, outcome, pointAwarded } = attemptMatch(current, card.id, termId);
     const termText = state.terms.find((t) => t.id === termId)?.termText ?? 'that term';
+
+    // Sound only after the match is confirmed. The drop that finishes the game stays silent
+    // here; the completion step plays the victory sound once.
+    const sound = soundForDrop(outcome, state.completedAt !== null);
+    if (sound) sounds.play(sound);
 
     if (outcome === 'correct') {
       updateGame(state);
