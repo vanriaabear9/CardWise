@@ -16,12 +16,29 @@ Everything is stored on the device in `cardwise.db`. No internet or backend is n
 ```
 topics 1 ──< terms 1 ──< descriptions        (ON DELETE CASCADE)
 topics 1 ──< game_history                    (ON DELETE SET NULL)
+game_history 1 ──< game_history_answers      (ON DELETE CASCADE)
 ```
 
 - **topics**: `id, title, description, category, is_builtin, created_at, updated_at`
 - **terms**: `id, topic_id → topics, term_text, position`
 - **descriptions**: `id, term_id → terms, description_text, position` (a term can have many)
-- **game_history**: `id, topic_id → topics (nullable), topic_title, score, total_questions, completed_at`
+- **game_history**: `id, game_uid (unique), topic_id → topics (nullable), topic_title, score, total_questions,
+  correct_matches, incorrect_attempts, duration_ms, started_at, completed_at`.
+  `score` = first-try points. Columns added in v3 are NULL for older rows ("not recorded").
+- **game_history_answers** (v3): `id, game_id → game_history, position, term_position, term_text,
+  description_text, first_attempt_term_text, first_attempt_correct, attempts`.
+  Text **snapshots** of what was played, so past games stay accurate after a topic is edited or deleted.
+
+A finished game and its answers are saved together in one transaction by
+`saveCompletedGame()`; saving the same `game_uid` again returns the existing record (no duplicates).
+
+## Migrations
+
+| Version | Change |
+| --- | --- |
+| 1 | Create topics, terms, descriptions, game_history |
+| 2 | Insert the built-in topics |
+| 3 | Add full game results + `game_history_answers` (adds only; keeps existing data) |
 
 ## Changing the schema later
 

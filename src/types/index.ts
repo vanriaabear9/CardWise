@@ -7,7 +7,15 @@ export type IconName = ComponentProps<typeof Ionicons>['name'];
 // Data models — these match the local SQLite tables (see src/database/schema.ts).
 export type { Description } from './description';
 export type { GameCard, GameState, GameSummary, GameTerm, MatchOutcome } from './game';
-export type { GameResult, NewGameResultInput } from './gameHistory';
+export type {
+  GameAnswer,
+  GameResult,
+  GameResultDetail,
+  HistoryStats,
+  HistoryTopic,
+  NewGameAnswerInput,
+  NewGameResultInput,
+} from './gameHistory';
 export type {
   EditDescriptionInput,
   EditTermInput,

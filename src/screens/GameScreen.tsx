@@ -17,17 +17,21 @@ import {
 import type { FeedbackKind, TermFlash, WindowRect } from '@/components';
 import { colors, radius, spacing, typography } from '@/constants';
 import { getErrorMessage } from '@/services/errors';
+import { saveCompletedGame } from '@/services/gameHistoryService';
 import { getTopicWithTerms } from '@/services/topicService';
 import type { GameCard, GameState } from '@/types';
 import { findDropTarget, type Point, type Rect } from '@/utils/dropTargets';
 import {
   attemptMatch,
+  buildGameRecord,
   getGameProgress,
   isTermComplete,
   prepareGame,
   summarizeGame,
   summaryToParams,
 } from '@/utils/gameEngine';
+
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 interface GameScreenProps {
   topicId: number;
@@ -185,16 +189,54 @@ export function GameScreen({ topicId }: GameScreenProps) {
     }
   };
 
-  // ----- Completion: hand the final numbers to the Results screen -----
+  // ----- Completion: save the game ONCE, then open its Results -----
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  /** Set the first time saving starts, so re-renders never save the game again. */
+  const saveRequested = useRef(false);
+  const mounted = useRef(true);
   useEffect(() => {
-    if (!game?.completedAt) return;
-    const summary = summarizeGame(game);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  /**
+   * Saves the finished game, waiting at least `minDelayMs` so the player sees the final match.
+   * Results open only after the database confirms the save. A retry uses the same game id,
+   * so it can never create a second record.
+   */
+  const saveAndOpenResults = async (minDelayMs: number) => {
+    const current = gameRef.current;
+    const record = current ? buildGameRecord(current) : null;
+    if (!record) return;
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      const [saved] = await Promise.all([saveCompletedGame(db, record), wait(minDelayMs)]);
+      if (!mounted.current) return; // the player left; the game is still saved
+      router.replace({ pathname: '/game/results', params: { historyId: String(saved.id) } });
+    } catch (error) {
+      console.warn('[GameScreen] Saving the game failed:', error);
+      if (mounted.current) setSaveError(getErrorMessage(error));
+    } finally {
+      if (mounted.current) setIsSaving(false);
+    }
+  };
+
+  /** Fallback when saving keeps failing: show the results without a history record. */
+  const openUnsavedResults = () => {
+    const summary = gameRef.current ? summarizeGame(gameRef.current) : null;
     if (!summary) return;
-    showFeedback('correct', 'All descriptions matched! Opening your results…');
-    const timer = setTimeout(() => {
-      router.replace({ pathname: '/game/results', params: summaryToParams(summary) });
-    }, FINISH_DELAY_MS);
-    return () => clearTimeout(timer);
+    router.replace({ pathname: '/game/results', params: { ...summaryToParams(summary), unsaved: '1' } });
+  };
+
+  useEffect(() => {
+    if (!game?.completedAt || saveRequested.current) return;
+    saveRequested.current = true;
+    showFeedback('correct', 'All descriptions matched! Saving your results…');
+    void saveAndOpenResults(FINISH_DELAY_MS);
     // Runs once when the game becomes complete.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.completedAt]);
@@ -333,18 +375,23 @@ export function GameScreen({ topicId }: GameScreenProps) {
       return;
     }
 
-    const { state, outcome } = attemptMatch(current, card.id, termId);
+    const { state, outcome, pointAwarded } = attemptMatch(current, card.id, termId);
     const termText = state.terms.find((t) => t.id === termId)?.termText ?? 'that term';
 
     if (outcome === 'correct') {
       updateGame(state);
       setFlash({ termId, kind: 'correct', id: Date.now() });
-      showFeedback('correct', `Correct! Matched to "${termText}". +1 point`);
+      showFeedback(
+        'correct',
+        pointAwarded
+          ? `Correct! Matched to "${termText}". +1 point`
+          : `Correct! Matched to "${termText}". No point, since it wasn't the first try.`,
+      );
       finishDrag(); // the card is now matched and leaves the list
     } else if (outcome === 'incorrect') {
       updateGame(state);
       setFlash({ termId, kind: 'incorrect', id: Date.now() });
-      showFeedback('incorrect', `Not a match for "${termText}". Try another term.`);
+      showFeedback('incorrect', `Not a match for "${termText}". This card can't score now, but place it to finish.`);
       returnCardToList(); // the card stays available
     } else {
       returnCardToList();
@@ -416,7 +463,9 @@ export function GameScreen({ topicId }: GameScreenProps) {
 
         <GameStatsBar progress={progress} />
 
-        <Text style={styles.instructions}>Drag each description to its matching term.</Text>
+        <Text style={styles.instructions}>
+          Drag each description to its matching term. A card scores only if it's right on the first try.
+        </Text>
         <MatchFeedbackBanner
           kind={feedback?.kind ?? 'info'}
           message={feedback?.message ?? DEFAULT_HINT}
@@ -500,6 +549,30 @@ export function GameScreen({ topicId }: GameScreenProps) {
           ) : (
             <View style={[styles.panelBody, styles.allDoneBox]}>
               <Text style={styles.allDone}>All descriptions matched!</Text>
+              {saveError ? (
+                <View style={styles.saveError}>
+                  <Text style={styles.saveErrorText}>
+                    Your game couldn't be saved to History. {saveError}
+                  </Text>
+                  <AppButton
+                    label="Try Again"
+                    icon="refresh"
+                    loading={isSaving}
+                    onPress={() => void saveAndOpenResults(0)}
+                  />
+                  <AppButton
+                    label="See Results Without Saving"
+                    variant="secondary"
+                    disabled={isSaving}
+                    onPress={openUnsavedResults}
+                  />
+                </View>
+              ) : (
+                <View style={styles.savingRow}>
+                  <ActivityIndicator color={colors.highlight} />
+                  <Text style={styles.savingText}>Saving your results…</Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -633,7 +706,24 @@ const styles = StyleSheet.create({
     ...typography.subheading,
     color: colors.highlight,
     textAlign: 'center',
-    paddingVertical: spacing.xl,
+    paddingTop: spacing.lg,
+  },
+  savingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  savingText: typography.caption,
+  saveError: {
+    alignSelf: 'stretch',
+    gap: spacing.sm,
+    padding: spacing.lg,
+  },
+  saveErrorText: {
+    ...typography.caption,
+    color: colors.danger,
+    textAlign: 'center',
   },
   ghostLayer: {
     position: 'absolute',

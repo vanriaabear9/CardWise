@@ -1,10 +1,13 @@
 /*
  * CardWise matching-game rules. No UI code, so it can be tested on its own.
  *
- * - Each description is a separate card worth exactly 1 point.
- * - A card dropped on its own term is correct; anywhere else is incorrect (no point).
+ * - Each description is a separate card worth at most 1 point.
+ * - A card dropped on its own term is correct; on another term it is incorrect.
+ * - FIRST-TRY POINTS: a card earns its point only if its very first drop is correct.
+ *   After a wrong drop it can still be placed (to finish the game) but no longer scores.
  * - A matched card can never score again.
  * - The game is complete when every card is matched.
+ * - Every card remembers its first attempted term and number of attempts (for the answer review).
  */
 import type {
   GameCard,
@@ -12,6 +15,8 @@ import type {
   GameSummary,
   GameTerm,
   MatchOutcome,
+  NewGameAnswerInput,
+  NewGameResultInput,
   TopicWithTerms,
 } from '@/types';
 
@@ -45,6 +50,12 @@ export function shuffleAwayFromOriginal<T>(items: readonly T[], random: RandomFn
   return [...items.slice(1), items[0]];
 }
 
+/** A unique id for one play-through (time + randomness; no extra libraries needed). */
+export function createGameId(random: RandomFn = Math.random): string {
+  const randomPart = Array.from({ length: 3 }, () => Math.floor(random() * 0x100000000).toString(36)).join('');
+  return `${Date.now().toString(36)}-${randomPart}`;
+}
+
 export type PrepareGameResult =
   | { ok: true; game: GameState }
   | { ok: false; reason: string };
@@ -55,7 +66,7 @@ export type PrepareGameResult =
  */
 export function prepareGame(
   topic: TopicWithTerms,
-  options: { random?: RandomFn; now?: () => string } = {},
+  options: { random?: RandomFn; now?: () => string; gameId?: string } = {},
 ): PrepareGameResult {
   const random = options.random ?? Math.random;
   const now = options.now ?? (() => new Date().toISOString());
@@ -87,6 +98,9 @@ export function prepareGame(
         termId: term.id,
         text: description.descriptionText,
         matched: false,
+        order: cards.length,
+        attempts: 0,
+        firstAttemptTermId: null,
       });
     }
   }
@@ -94,6 +108,7 @@ export function prepareGame(
   return {
     ok: true,
     game: {
+      gameId: options.gameId ?? createGameId(random),
       topicId: topic.id,
       topicTitle: topic.title,
       terms,
@@ -110,39 +125,52 @@ export function prepareGame(
 /**
  * Applies one drop of a card onto a term. Returns a NEW state plus what happened.
  * - 'ignored': game already over, card unknown/already matched, or term unknown.
+ * - `pointAwarded`: true only for a correct drop that was the card's FIRST drop.
  */
 export function attemptMatch(
   state: GameState,
   cardId: number,
   termId: number,
   now: () => string = () => new Date().toISOString(),
-): { state: GameState; outcome: MatchOutcome } {
+): { state: GameState; outcome: MatchOutcome; pointAwarded: boolean } {
   if (state.completedAt) {
-    return { state, outcome: 'ignored' };
+    return { state, outcome: 'ignored', pointAwarded: false };
   }
   const card = state.cards.find((c) => c.id === cardId);
   const term = state.terms.find((t) => t.id === termId);
   if (!card || card.matched || !term) {
-    return { state, outcome: 'ignored' };
+    return { state, outcome: 'ignored', pointAwarded: false };
   }
 
-  if (card.termId !== termId) {
+  const isCorrect = card.termId === termId;
+  const isFirstTry = card.attempts === 0;
+  // Record the attempt on the card (first attempted term is kept forever).
+  const recorded: GameCard = {
+    ...card,
+    matched: isCorrect,
+    attempts: card.attempts + 1,
+    firstAttemptTermId: card.firstAttemptTermId ?? termId,
+  };
+  const cards = state.cards.map((c) => (c.id === cardId ? recorded : c));
+
+  if (!isCorrect) {
     return {
-      state: { ...state, incorrectAttempts: state.incorrectAttempts + 1 },
+      state: { ...state, cards, incorrectAttempts: state.incorrectAttempts + 1 },
       outcome: 'incorrect',
+      pointAwarded: false,
     };
   }
 
-  const cards = state.cards.map((c) => (c.id === cardId ? { ...c, matched: true } : c));
   const terms = state.terms.map((t) =>
     t.id === termId ? { ...t, matchedCount: t.matchedCount + 1 } : t,
   );
-  const score = state.score + 1;
+  const score = state.score + (isFirstTry ? 1 : 0);
   const isComplete = cards.every((c) => c.matched);
 
   return {
     state: { ...state, cards, terms, score, completedAt: isComplete ? now() : null },
     outcome: 'correct',
+    pointAwarded: isFirstTry,
   };
 }
 
@@ -191,7 +219,48 @@ export function summarizeGame(state: GameState): GameSummary | null {
   };
 }
 
+/**
+ * Everything to save for a completed game, including a text snapshot of every description
+ * in the topic's order. Returns null if the game isn't finished.
+ */
+export function buildGameRecord(state: GameState): NewGameResultInput | null {
+  const summary = summarizeGame(state);
+  if (!summary) {
+    return null;
+  }
+  const termIndex = new Map(state.terms.map((term, index) => [term.id, index]));
+  const termText = new Map(state.terms.map((term) => [term.id, term.termText]));
+
+  const answers: NewGameAnswerInput[] = [...state.cards]
+    .sort((a, b) => a.order - b.order)
+    .map((card) => ({
+      termPosition: termIndex.get(card.termId) ?? 0,
+      termText: termText.get(card.termId) ?? '',
+      descriptionText: card.text,
+      firstAttemptTermText:
+        card.firstAttemptTermId === null ? null : (termText.get(card.firstAttemptTermId) ?? null),
+      // Compare ids, not text: two terms could have the same wording.
+      firstAttemptCorrect: card.firstAttemptTermId === null ? null : card.firstAttemptTermId === card.termId,
+      attempts: card.attempts,
+    }));
+
+  return {
+    gameUid: state.gameId,
+    topicId: summary.topicId,
+    topicTitle: summary.topicTitle,
+    score: summary.score,
+    totalQuestions: summary.totalDescriptions,
+    correctMatches: summary.correctMatches,
+    incorrectAttempts: summary.incorrectAttempts,
+    durationMs: summary.durationMs,
+    startedAt: summary.startedAt,
+    completedAt: summary.completedAt,
+    answers,
+  };
+}
+
 // ---------- Passing the summary to the Results screen (route params are strings) ----------
+// Used only as a fallback when a finished game could not be saved.
 
 export type GameSummaryParams = Record<keyof GameSummary, string>;
 

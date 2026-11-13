@@ -15,17 +15,25 @@ export interface GameCard {
   termId: number;
   text: string;
   matched: boolean;
+  /** Position in the topic's saved order (term order, then description order). Used for the answer review. */
+  order: number;
+  /** How many times this card has been dropped on a term (right or wrong). */
+  attempts: number;
+  /** The term this card was FIRST dropped on, or null if it hasn't been dropped yet. */
+  firstAttemptTermId: number | null;
 }
 
 /** Everything about one game in progress. Built from (but never modifying) a saved topic. */
 export interface GameState {
+  /** Unique id of this play-through. Saving the same game twice is detected with it. */
+  gameId: string;
   topicId: number;
   topicTitle: string;
   /** Terms in their saved order. */
   terms: GameTerm[];
   /** Description cards in shuffled order. */
   cards: GameCard[];
-  /** 1 point per correctly matched description. */
+  /** First-try points: 1 per description matched correctly on its FIRST drop. */
   score: number;
   /** Maximum possible score (= number of descriptions). */
   totalDescriptions: number;
@@ -38,12 +46,14 @@ export interface GameState {
 /** What happened when a card was dropped on a term. */
 export type MatchOutcome = 'correct' | 'incorrect' | 'ignored';
 
-/** Final numbers of a finished game, handed to the Results screen (and, in Phase 6, saved to history). */
+/** Final numbers of a finished game. */
 export interface GameSummary {
   topicId: number;
   topicTitle: string;
+  /** First-try points. */
   score: number;
   totalDescriptions: number;
+  /** Descriptions placed on the right term (all of them, once the game is complete). */
   correctMatches: number;
   incorrectAttempts: number;
   startedAt: string;

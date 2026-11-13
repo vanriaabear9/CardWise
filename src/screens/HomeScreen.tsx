@@ -127,7 +127,11 @@ export function HomeScreen() {
                 icon="game-controller-outline"
                 title={game.topicTitle}
                 subtitle={`Played ${formatShortDate(game.completedAt)}`}
-                trailingText={`${game.score}/${game.totalQuestions}`}
+                trailingText={`${Math.min(game.score, game.totalQuestions)}/${game.totalQuestions}`}
+                showChevron
+                onPress={() =>
+                  router.push({ pathname: '/history/[historyId]', params: { historyId: String(game.id) } })
+                }
               />
             ))}
           </View>

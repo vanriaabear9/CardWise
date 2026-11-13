@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { SCHEMA_V1_STATEMENTS } from './schema';
+import { SCHEMA_V1_STATEMENTS, SCHEMA_V3_STATEMENTS } from './schema';
 import { seedBuiltinTopics } from './seed';
 
 /**
@@ -34,6 +34,15 @@ export const MIGRATIONS: Migration[] = [
     version: 2,
     name: 'Insert built-in topics',
     up: seedBuiltinTopics,
+  },
+  {
+    version: 3,
+    name: 'Add full game results and answer snapshots to game history',
+    up: async (db) => {
+      for (const statement of SCHEMA_V3_STATEMENTS) {
+        await db.execAsync(statement);
+      }
+    },
   },
 ];
 
