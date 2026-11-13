@@ -14,7 +14,10 @@ export interface Topic {
 
 /** Topic info for lists and cards, plus how many terms (flashcards) it has. */
 export interface TopicSummary extends Topic {
+  /** Number of terms. */
   cardCount: number;
+  /** Number of descriptions across all terms. */
+  descriptionCount: number;
 }
 
 /** A topic with all of its terms and their descriptions, in display order. */

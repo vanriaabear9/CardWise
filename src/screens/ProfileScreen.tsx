@@ -1,56 +1,88 @@
 import { StyleSheet, Text, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import Constants from 'expo-constants';
+import { useRouter, type Href } from 'expo-router';
 
-import { Card, ListItem, ScreenContainer, ScreenHeader, Section, StatTile } from '@/components';
-import { colors, radius, spacing, typography } from '@/constants';
+import {
+  Avatar,
+  Card,
+  IconButton,
+  ListItem,
+  ProgressBar,
+  ScreenContainer,
+  ScreenHeader,
+  StatTile,
+} from '@/components';
+import { colors, spacing, typography } from '@/constants';
+import { usePlayerStats, useProfile } from '@/hooks/useProfile';
+import type { IconName } from '@/types';
 
-/**
- * Placeholder layout for the local (offline) player profile.
- * There are no online accounts — player data will be stored on the device later.
- */
+interface MenuEntry {
+  icon: IconName;
+  title: string;
+  subtitle: string;
+  href: Href;
+}
+
+const MENU: MenuEntry[] = [
+  { icon: 'stats-chart-outline', title: 'My Statistics', subtitle: 'Scores, accuracy, and progress', href: '/profile/statistics' },
+  { icon: 'albums-outline', title: 'Manage Topics', subtitle: 'Edit or delete your topics', href: '/profile/topics' },
+  { icon: 'heart-outline', title: 'My Favorites', subtitle: 'Topics you saved', href: '/profile/favorites' },
+  { icon: 'ribbon-outline', title: 'Achievements', subtitle: 'Badges you can earn', href: '/profile/achievements' },
+  { icon: 'help-circle-outline', title: 'Help & Instructions', subtitle: 'How to use CardWise', href: '/profile/help' },
+  { icon: 'information-circle-outline', title: 'About CardWise', subtitle: 'App information', href: '/profile/about' },
+];
+
+/** Profile dashboard: local player profile, key statistics, and the profile menu. No accounts, no log out. */
 export function ProfileScreen() {
-  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+  const router = useRouter();
+  const { data: profile } = useProfile();
+  const { data: stats, error: statsError } = usePlayerStats();
+  const { level } = stats;
+  const best = stats.bestGame;
 
   return (
     <ScreenContainer>
       <ScreenHeader title="Profile" />
 
-      <Section title="Player Information" icon="person-circle-outline">
-        <Card style={styles.playerCard}>
-          <View style={styles.avatar}>
-            <Ionicons name="person" size={32} color={colors.secondary} />
-          </View>
+      <Card style={styles.playerCard}>
+        <View style={styles.playerRow}>
+          <Avatar avatarId={profile.avatarId} size={68} />
           <View style={styles.playerText}>
-            <Text style={styles.playerName}>Player</Text>
-            <Text style={styles.playerMeta}>Offline profile on this device</Text>
+            <Text style={styles.playerName} numberOfLines={1}>
+              {profile.displayName}
+            </Text>
+            <Text style={styles.level}>Level {level.level}</Text>
           </View>
-        </Card>
-      </Section>
-
-      <Section title="Statistics" icon="stats-chart-outline">
-        <View style={styles.statsRow}>
-          <StatTile icon="albums-outline" label="Topics" value="0" />
-          <StatTile icon="game-controller-outline" label="Games" value="0" />
-          <StatTile icon="trophy-outline" label="Best Score" value="—" />
+          <IconButton icon="pencil" accessibilityLabel="Edit profile" onPress={() => router.push('/profile/edit')} />
         </View>
-      </Section>
+        <View style={styles.xp}>
+          <ProgressBar
+            value={level.xpIntoLevel / level.xpPerLevel}
+            accessibilityLabel={`${level.xpIntoLevel} of ${level.xpPerLevel} XP to level ${level.level + 1}`}
+          />
+          <Text style={styles.caption}>
+            {level.xpIntoLevel}/{level.xpPerLevel} XP to Level {level.level + 1} · earn 1 XP per first-try point
+          </Text>
+        </View>
+      </Card>
+
+      <View style={styles.statsRow}>
+        <StatTile icon="game-controller-outline" label="Games Played" value={String(stats.gamesPlayed)} />
+        <StatTile icon="trophy-outline" label="Best Score" value={best ? `${best.score}/${best.totalQuestions}` : '—'} />
+        <StatTile icon="albums-outline" label="Topics Created" value={String(stats.topicsCreated)} />
+      </View>
+      {statsError ? <Text style={styles.error}>Couldn't load statistics. {statsError}</Text> : null}
 
       <View style={styles.menu}>
-        <ListItem icon="heart-outline" title="My Favorites" subtitle="Topics you saved" showChevron />
-        <ListItem icon="ribbon-outline" title="Achievements" subtitle="Badges you earned" showChevron />
-        <ListItem
-          icon="help-circle-outline"
-          title="Help & Instructions"
-          subtitle="How to play CardWise"
-          showChevron
-        />
-        <ListItem
-          icon="information-circle-outline"
-          title="About CardWise"
-          subtitle={`Version ${appVersion}`}
-          showChevron
-        />
+        {MENU.map((entry) => (
+          <ListItem
+            key={entry.title}
+            icon={entry.icon}
+            title={entry.title}
+            subtitle={entry.subtitle}
+            showChevron
+            onPress={() => router.push(entry.href)}
+          />
+        ))}
       </View>
     </ScreenContainer>
   );
@@ -58,28 +90,33 @@ export function ProfileScreen() {
 
 const styles = StyleSheet.create({
   playerCard: {
+    gap: spacing.lg,
+  },
+  playerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primaryMuted,
-    borderWidth: 1,
-    borderColor: colors.primary,
+    gap: spacing.lg,
   },
   playerText: {
     flex: 1,
     gap: spacing.xs,
   },
   playerName: typography.heading,
-  playerMeta: typography.caption,
+  level: {
+    ...typography.label,
+    color: colors.highlight,
+  },
+  xp: {
+    gap: spacing.xs,
+  },
+  caption: typography.caption,
   statsRow: {
     flexDirection: 'row',
     gap: spacing.md,
+  },
+  error: {
+    ...typography.caption,
+    color: colors.danger,
   },
   menu: {
     gap: spacing.md,

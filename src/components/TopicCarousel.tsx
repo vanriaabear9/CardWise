@@ -12,6 +12,9 @@ interface TopicCarouselProps {
   onTopicPress?: (topic: TopicSummary) => void;
   /** When provided, user-created topics show an edit button. Built-in topics never do. */
   onTopicEdit?: (topic: TopicSummary) => void;
+  /** When provided, every topic shows a heart button. */
+  onToggleFavorite?: (topic: TopicSummary) => void;
+  favoriteIds?: ReadonlySet<number>;
 }
 
 /** Card width: ~62% of the screen, kept between 200 and 280 for small and large phones. */
@@ -28,6 +31,8 @@ export function TopicCarousel({
   emptyMessage,
   onTopicPress,
   onTopicEdit,
+  onToggleFavorite,
+  favoriteIds,
 }: TopicCarouselProps) {
   const { width: screenWidth } = useWindowDimensions();
   const cardWidth = Math.min(
@@ -48,12 +53,15 @@ export function TopicCarousel({
       horizontal
       data={topics}
       keyExtractor={(topic) => String(topic.id)}
+      extraData={favoriteIds} // re-render cards when a heart changes
       renderItem={({ item }) => (
         <TopicCard
           topic={item}
           width={cardWidth}
           onPress={onTopicPress ? () => onTopicPress(item) : undefined}
           onEditPress={onTopicEdit && !item.isBuiltin ? () => onTopicEdit(item) : undefined}
+          onFavoritePress={onToggleFavorite ? () => onToggleFavorite(item) : undefined}
+          isFavorite={favoriteIds?.has(item.id) ?? false}
         />
       )}
       showsHorizontalScrollIndicator={false}

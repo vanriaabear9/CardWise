@@ -13,6 +13,10 @@ interface IconButtonProps {
   onPress?: () => void;
   tone?: IconButtonTone;
   size?: number;
+  /** Overrides the icon color (e.g. purple for an active favorite). */
+  color?: string;
+  /** Selected/on state for toggle buttons, read by screen readers. */
+  selected?: boolean;
 }
 
 /** Round icon-only button (e.g. delete, edit, back). 40×40 for an easy tap target. */
@@ -22,12 +26,15 @@ export function IconButton({
   onPress,
   tone = 'default',
   size = iconSize.md,
+  color,
+  selected,
 }: IconButtonProps) {
   const isDanger = tone === 'danger';
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={selected === undefined ? undefined : { selected }}
       onPress={onPress}
       hitSlop={4}
       style={({ pressed }) => [
@@ -36,7 +43,7 @@ export function IconButton({
         pressed && styles.pressed,
       ]}
     >
-      <Ionicons name={icon} size={size} color={isDanger ? colors.danger : colors.textPrimary} />
+      <Ionicons name={icon} size={size} color={color ?? (isDanger ? colors.danger : colors.textPrimary)} />
     </Pressable>
   );
 }

@@ -93,6 +93,29 @@ export const SCHEMA_V3_STATEMENTS = [
   'CREATE INDEX IF NOT EXISTS idx_game_history_answers_game ON game_history_answers(game_id, position);',
 ];
 
+/**
+ * Schema version 4 (Phase 7): favorites and the local player profile.
+ *
+ *   topics 1 ──o favorites (a favorite is removed automatically when its topic is deleted)
+ *
+ * Only ADDS tables; nothing existing changes.
+ */
+export const SCHEMA_V4_STATEMENTS = [
+  // UNIQUE topic_id: a topic is either a favorite or not, never twice.
+  `CREATE TABLE IF NOT EXISTS favorites (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id   INTEGER NOT NULL UNIQUE REFERENCES topics(id) ON DELETE CASCADE,
+    created_at TEXT    NOT NULL
+  );`,
+  // Exactly one local profile row (id is always 1). No email, password, or other personal data.
+  `CREATE TABLE IF NOT EXISTS user_profile (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    display_name TEXT    NOT NULL CHECK (length(trim(display_name)) > 0 AND length(display_name) <= 30),
+    avatar_id    TEXT    NOT NULL,
+    updated_at   TEXT    NOT NULL
+  );`,
+];
+
 /** All statements for schema version 1, in the order they must run. */
 export const SCHEMA_V1_STATEMENTS = [
   CREATE_TOPICS_TABLE,

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { SCHEMA_V1_STATEMENTS, SCHEMA_V3_STATEMENTS } from './schema';
+import { SCHEMA_V1_STATEMENTS, SCHEMA_V3_STATEMENTS, SCHEMA_V4_STATEMENTS } from './schema';
 import { seedBuiltinTopics } from './seed';
 
 /**
@@ -40,6 +40,15 @@ export const MIGRATIONS: Migration[] = [
     name: 'Add full game results and answer snapshots to game history',
     up: async (db) => {
       for (const statement of SCHEMA_V3_STATEMENTS) {
+        await db.execAsync(statement);
+      }
+    },
+  },
+  {
+    version: 4,
+    name: 'Add favorites and the local player profile',
+    up: async (db) => {
+      for (const statement of SCHEMA_V4_STATEMENTS) {
         await db.execAsync(statement);
       }
     },

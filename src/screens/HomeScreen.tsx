@@ -16,6 +16,7 @@ import {
 } from '@/components';
 import type { SegmentOption } from '@/components';
 import { spacing } from '@/constants';
+import { useFavorites, useProfile } from '@/hooks/useProfile';
 import { useRecentGames } from '@/hooks/useRecentGames';
 import { useBuiltinTopics, useUserTopics } from '@/hooks/useTopics';
 import { formatShortDate } from '@/utils/formatDate';
@@ -39,6 +40,8 @@ export function HomeScreen() {
   const builtinTopics = useBuiltinTopics();
   const userTopics = useUserTopics();
   const recentGamesQuery = useRecentGames(RECENT_GAMES_PREVIEW_COUNT);
+  const profile = useProfile();
+  const { favoriteIds, toggleFavorite } = useFavorites();
 
   const trimmedQuery = searchQuery.trim();
   const isSearching = trimmedQuery.length > 0;
@@ -92,7 +95,7 @@ export function HomeScreen() {
         />
       </View>
 
-      <WelcomeBanner playerName="Player" message="Ready to sharpen your memory today?" />
+      <WelcomeBanner playerName={profile.data.displayName} message="Ready to sharpen your memory today?" />
 
       <Section
         title={isSearching ? 'Search Results' : 'Topics'}
@@ -110,6 +113,8 @@ export function HomeScreen() {
           onTopicEdit={(topic) =>
             router.push({ pathname: '/topic/[id]/edit', params: { id: String(topic.id) } })
           }
+          favoriteIds={favoriteIds}
+          onToggleFavorite={toggleFavorite}
         />
       </Section>
 

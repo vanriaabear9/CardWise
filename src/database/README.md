@@ -17,6 +17,8 @@ Everything is stored on the device in `cardwise.db`. No internet or backend is n
 topics 1 ──< terms 1 ──< descriptions        (ON DELETE CASCADE)
 topics 1 ──< game_history                    (ON DELETE SET NULL)
 game_history 1 ──< game_history_answers      (ON DELETE CASCADE)
+topics 1 ──o favorites                       (ON DELETE CASCADE)
+user_profile                                 (single row, id = 1)
 ```
 
 - **topics**: `id, title, description, category, is_builtin, created_at, updated_at`
@@ -29,6 +31,14 @@ game_history 1 ──< game_history_answers      (ON DELETE CASCADE)
   description_text, first_attempt_term_text, first_attempt_correct, attempts`.
   Text **snapshots** of what was played, so past games stay accurate after a topic is edited or deleted.
 
+- **favorites** (v4): `id, topic_id → topics (unique), created_at`. Reads JOIN `topics`, so a favorite of
+  a deleted topic never appears; `deleteTopic()` also removes it explicitly.
+- **user_profile** (v4): `id (always 1), display_name (1–30 chars), avatar_id, updated_at`. No personal data.
+  When the row doesn't exist the app shows the default name and avatar.
+
+Built-in topics (`is_builtin = 1`) are protected in the service layer: every topic, term, and description
+write refuses them. Achievements and statistics are calculated from these tables, not stored.
+
 A finished game and its answers are saved together in one transaction by
 `saveCompletedGame()`; saving the same `game_uid` again returns the existing record (no duplicates).
 
@@ -39,6 +49,7 @@ A finished game and its answers are saved together in one transaction by
 | 1 | Create topics, terms, descriptions, game_history |
 | 2 | Insert the built-in topics |
 | 3 | Add full game results + `game_history_answers` (adds only; keeps existing data) |
+| 4 | Add `favorites` and `user_profile` (adds only; keeps existing data) |
 
 ## Changing the schema later
 

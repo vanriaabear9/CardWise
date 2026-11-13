@@ -16,6 +16,7 @@ export type {
   NewGameAnswerInput,
   NewGameResultInput,
 } from './gameHistory';
+export type { Achievement, PlayerLevel, PlayerProfile, PlayerStats, ProfileInput } from './profile';
 export type {
   EditDescriptionInput,
   EditTermInput,

@@ -48,8 +48,14 @@ interface TopicRow {
   updated_at: string;
 }
 
-interface TopicSummaryRow extends TopicRow {
+export interface TopicSummaryRow extends TopicRow {
   card_count: number;
+  description_count: number;
+}
+
+/** Converts a summary row (SUMMARY_SELECT columns) to a TopicSummary. */
+export function toTopicSummary(row: TopicSummaryRow): TopicSummary {
+  return { ...toTopic(row), cardCount: row.card_count, descriptionCount: row.description_count };
 }
 
 interface TermRow {
@@ -89,9 +95,11 @@ function toDescription(row: DescriptionRow): Description {
 
 // ---------- Reading topics ----------
 
-const SUMMARY_SELECT = `
+export const SUMMARY_SELECT = `
   SELECT t.id, t.title, t.description, t.category, t.is_builtin, t.created_at, t.updated_at,
-         (SELECT COUNT(*) FROM terms te WHERE te.topic_id = t.id) AS card_count
+         (SELECT COUNT(*) FROM terms te WHERE te.topic_id = t.id) AS card_count,
+         (SELECT COUNT(*) FROM descriptions d JOIN terms te ON te.id = d.term_id
+          WHERE te.topic_id = t.id) AS description_count
   FROM topics t`;
 
 async function getTopicSummaries(
@@ -112,7 +120,7 @@ async function getTopicSummaries(
   }
 
   const rows = await db.getAllAsync<TopicSummaryRow>(sql, params);
-  return rows.map((row) => ({ ...toTopic(row), cardCount: row.card_count }));
+  return rows.map(toTopicSummary);
 }
 
 /** All topics (built-in first, then user-created), each with its card count. */
@@ -178,6 +186,35 @@ export async function getTopicWithTerms(
   }));
 
   return { ...toTopic(topicRow), terms };
+}
+
+// ---------- Protecting built-in topics ----------
+
+export const BUILTIN_PROTECTED_MESSAGE = "Built-in topics can't be edited or deleted.";
+
+const OWNER_TOPIC_SQL = {
+  topic: 'SELECT is_builtin FROM topics WHERE id = ?',
+  term: 'SELECT tp.is_builtin FROM topics tp JOIN terms t ON t.topic_id = tp.id WHERE t.id = ?',
+  description: `SELECT tp.is_builtin FROM topics tp
+                JOIN terms t ON t.topic_id = tp.id
+                JOIN descriptions d ON d.term_id = t.id
+                WHERE d.id = ?`,
+} as const;
+
+/**
+ * Throws if the topic (or the topic that owns the given term/description) is built-in.
+ * Built-in "Explore Topics" ship with the app and must never be changed or deleted.
+ * A missing row is left to the caller's own "not found" handling.
+ */
+async function assertNotBuiltin(
+  db: SQLiteDatabase,
+  kind: keyof typeof OWNER_TOPIC_SQL,
+  id: number,
+): Promise<void> {
+  const row = await db.getFirstAsync<{ is_builtin: number }>(OWNER_TOPIC_SQL[kind], [id]);
+  if (row?.is_builtin === 1) {
+    throw new ValidationError(BUILTIN_PROTECTED_MESSAGE);
+  }
 }
 
 // ---------- Writing topics ----------
@@ -274,6 +311,8 @@ export async function updateTopic(
     throw new ValidationError('Nothing to update.');
   }
 
+  await assertNotBuiltin(db, 'topic', topicId);
+
   assignments.push('updated_at = ?');
   params.push(nowIso(), topicId);
 
@@ -289,15 +328,21 @@ export async function updateTopic(
 }
 
 /**
- * Deletes a topic. Its terms and their descriptions are deleted automatically
- * (ON DELETE CASCADE). Game history keeps the record with topic_id set to NULL.
+ * Deletes a USER topic (built-in topics are refused). Its terms and their descriptions are
+ * deleted automatically (ON DELETE CASCADE), and so is its favorite mark.
+ * Game history keeps every record and its answer snapshots, with topic_id set to NULL.
  */
 export async function deleteTopic(db: SQLiteDatabase, topicId: number): Promise<void> {
   requireId(topicId, 'topic');
-  const result = await db.runAsync('DELETE FROM topics WHERE id = ?', [topicId]);
-  if (result.changes === 0) {
-    throw new NotFoundError('Topic not found.');
-  }
+  await assertNotBuiltin(db, 'topic', topicId);
+  await db.withTransactionAsync(async () => {
+    // Also removed by the foreign key; done explicitly so no favorite can ever point at nothing.
+    await db.runAsync('DELETE FROM favorites WHERE topic_id = ?', [topicId]);
+    const result = await db.runAsync('DELETE FROM topics WHERE id = ? AND is_builtin = 0', [topicId]);
+    if (result.changes === 0) {
+      throw new NotFoundError('Topic not found.');
+    }
+  });
   notifyDataChanged();
 }
 
@@ -361,6 +406,7 @@ export async function updateTopicWithTerms(
     if (!topicRow) {
       throw new NotFoundError('Topic not found. It may have been deleted.');
     }
+    await assertNotBuiltin(db, 'topic', topicId);
     if (category === undefined) {
       await db.runAsync(
         'UPDATE topics SET title = ?, description = ?, updated_at = ? WHERE id = ?',
@@ -490,7 +536,8 @@ export async function addTerm(
     if (!topic) {
       throw new NotFoundError('Topic not found.');
     }
-    const next = await db.getFirstAsync<{ next_position: number }>(
+    await assertNotBuiltin(db, 'topic', topicId);
+    const next =await db.getFirstAsync<{ next_position: number }>(
       'SELECT COALESCE(MAX(position), -1) + 1 AS next_position FROM terms WHERE topic_id = ?',
       [topicId],
     );
@@ -508,6 +555,7 @@ export async function updateTerm(db: SQLiteDatabase, termId: number, termText: s
   const text = requireText(termText, 'Term', LIMITS.termText);
 
   await db.withTransactionAsync(async () => {
+    await assertNotBuiltin(db, 'term', termId);
     const result = await db.runAsync('UPDATE terms SET term_text = ? WHERE id = ?', [text, termId]);
     if (result.changes === 0) {
       throw new NotFoundError('Term not found.');
@@ -522,6 +570,7 @@ export async function deleteTerm(db: SQLiteDatabase, termId: number): Promise<vo
   requireId(termId, 'term');
 
   await db.withTransactionAsync(async () => {
+    await assertNotBuiltin(db, 'term', termId);
     // Touch the topic first, while the term (and its topic_id) still exists.
     await touchTopicOfTerm(db, termId);
     const result = await db.runAsync('DELETE FROM terms WHERE id = ?', [termId]);
@@ -551,6 +600,7 @@ export async function addDescription(
     if (!term) {
       throw new NotFoundError('Term not found.');
     }
+    await assertNotBuiltin(db, 'term', termId);
     const result = await db.runAsync(
       `INSERT INTO descriptions (term_id, description_text, position)
        SELECT ?, ?, COALESCE(MAX(position), -1) + 1 FROM descriptions WHERE term_id = ?`,
@@ -574,6 +624,7 @@ export async function updateDescription(
   const text = requireText(descriptionText, 'Description', LIMITS.descriptionText);
 
   await db.withTransactionAsync(async () => {
+    await assertNotBuiltin(db, 'description', descriptionId);
     const result = await db.runAsync(
       'UPDATE descriptions SET description_text = ? WHERE id = ?',
       [text, descriptionId],
@@ -595,6 +646,7 @@ export async function deleteDescription(db: SQLiteDatabase, descriptionId: numbe
   requireId(descriptionId, 'description');
 
   await db.withTransactionAsync(async () => {
+    await assertNotBuiltin(db, 'description', descriptionId);
     await db.runAsync(
       `UPDATE topics SET updated_at = ?
        WHERE id = (SELECT t.topic_id FROM terms t JOIN descriptions d ON d.term_id = t.id WHERE d.id = ?)`,

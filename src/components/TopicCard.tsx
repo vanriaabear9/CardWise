@@ -12,10 +12,13 @@ interface TopicCardProps {
   onPress?: () => void;
   /** Shows a small edit (pencil) button when provided. */
   onEditPress?: () => void;
+  /** Shows a heart button when provided. */
+  onFavoritePress?: () => void;
+  isFavorite?: boolean;
 }
 
 /** Card showing a topic's title, short description, and number of flashcards. */
-export function TopicCard({ topic, width, onPress, onEditPress }: TopicCardProps) {
+export function TopicCard({ topic, width, onPress, onEditPress, onFavoritePress, isFavorite = false }: TopicCardProps) {
   const cardLabel = topic.cardCount === 1 ? 'card' : 'cards';
 
   return (
@@ -31,14 +34,26 @@ export function TopicCard({ topic, width, onPress, onEditPress }: TopicCardProps
         <View style={styles.iconBadge}>
           <Ionicons name="book-outline" size={iconSize.md} color={colors.secondary} />
         </View>
-        {onEditPress ? (
-          <IconButton
-            icon="pencil"
-            size={iconSize.sm}
-            accessibilityLabel={`Edit ${topic.title}`}
-            onPress={onEditPress}
-          />
-        ) : null}
+        <View style={styles.buttons}>
+          {onFavoritePress ? (
+            <IconButton
+              icon={isFavorite ? 'heart' : 'heart-outline'}
+              size={iconSize.sm}
+              color={isFavorite ? colors.highlight : colors.textPrimary}
+              selected={isFavorite}
+              accessibilityLabel={isFavorite ? `Remove ${topic.title} from favorites` : `Add ${topic.title} to favorites`}
+              onPress={onFavoritePress}
+            />
+          ) : null}
+          {onEditPress ? (
+            <IconButton
+              icon="pencil"
+              size={iconSize.sm}
+              accessibilityLabel={`Edit ${topic.title}`}
+              onPress={onEditPress}
+            />
+          ) : null}
+        </View>
       </View>
 
       <View style={styles.body}>
@@ -76,6 +91,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  buttons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   iconBadge: {
     width: 40,
