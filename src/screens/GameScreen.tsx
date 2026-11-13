@@ -101,6 +101,8 @@ export function GameScreen({ topicId }: GameScreenProps) {
   /** Which remaining card is on top of the draw pile (wraps around). */
   const [deckIndex, setDeckIndex] = useState(0);
   const [scrollLocked, setScrollLocked] = useState(false);
+  /** The card is flying back to the pile; a new drag may interrupt it. */
+  const [returning, setReturning] = useState(false);
   const [hoveredTermId, setHoveredTermId] = useState<number | null>(null);
   const hoveredRef = useRef<number | null>(null);
   const dragCardRef = useRef<GameCard | null>(null);
@@ -206,6 +208,7 @@ export function GameScreen({ topicId }: GameScreenProps) {
     hoveredRef.current = null;
     setHoveredTermId(null);
     setDrag(null);
+    setReturning(false);
     setScrollLocked(false);
   };
 
@@ -217,6 +220,7 @@ export function GameScreen({ topicId }: GameScreenProps) {
       Animated.timing(ghostScale, { ...timing, toValue: 1 }),
     ]);
     returnAnimation.current = animation;
+    setReturning(true);
     animation.start(() => {
       // Only the latest animation may end the drag.
       if (returnAnimation.current === animation) {
@@ -241,8 +245,12 @@ export function GameScreen({ topicId }: GameScreenProps) {
   };
 
   const handleDragStart = (card: GameCard, cardRect: WindowRect, touch: Point) => {
-    returnAnimation.current?.stop();
+    // Interrupt a card that is still flying back. Clear the ref first so the stopped
+    // animation's callback doesn't end this new drag.
+    const running = returnAnimation.current;
     returnAnimation.current = null;
+    running?.stop();
+    setReturning(false);
     dragCardRef.current = card;
     geometry.current = null;
     hoveredRef.current = null;
@@ -304,8 +312,12 @@ export function GameScreen({ topicId }: GameScreenProps) {
     if (!card) return;
 
     // A very quick drop can happen before the term positions are measured: wait for them.
-    const geo = geometry.current ?? (await geometryReady.current) ?? null;
+    const started = geometry.current ?? (await geometryReady.current) ?? null;
     if (dragCardRef.current !== card) return; // drag was already ended elsewhere
+    // Re-measure the terms at the moment of the drop: the layout may have shifted during the drag
+    // (e.g. the feedback message changed height), and stale positions would make a good drop miss.
+    const geo = started ? await measureGeometry(started.fingerStart) : null;
+    if (dragCardRef.current !== card) return;
     const current = gameRef.current;
 
     if (!geo || !current) {
@@ -375,14 +387,15 @@ export function GameScreen({ topicId }: GameScreenProps) {
   // Decorative suit per card = its position in the shuffled deck (unrelated to the answer).
   const suitIndexById = new Map(game.cards.map((card, index) => [card.id, index]));
   const completedTerms = game.terms.filter(isTermComplete).length;
-  const cardsDisabled = drag !== null || game.completedAt !== null;
+  // A card flying back after a miss does NOT block picking a card up again.
+  const cardsDisabled = (drag !== null && !returning) || game.completedAt !== null;
 
   // Draw pile: one card on top. After a correct match the matched card leaves the list,
   // so the same index now points at the next card. Wrap around at the end.
   const deckSize = remainingCards.length;
   const topPosition = deckSize === 0 ? 0 : deckIndex % deckSize;
   const topCard = deckSize === 0 ? null : remainingCards[topPosition];
-  const browseDisabled = deckSize < 2 || cardsDisabled;
+  const browseDisabled = deckSize < 2 || drag !== null || game.completedAt !== null;
   const showPrevious = () => setDeckIndex((topPosition - 1 + deckSize) % deckSize);
   const showNext = () => setDeckIndex((topPosition + 1) % deckSize);
 

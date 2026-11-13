@@ -126,7 +126,9 @@ export function DraggableDescriptionCard({
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => !latest.current.disabled,
-      onMoveShouldSetPanResponder: () => false,
+      // If the touch began while the card was locked (e.g. another card was still flying back),
+      // claim it as soon as the finger moves, so the user never has to lift and try again.
+      onMoveShouldSetPanResponder: () => !latest.current.disabled && !gesture.current.touching,
 
       onPanResponderGrant: (event) => {
         const g = gesture.current;
@@ -172,32 +174,48 @@ export function DraggableDescriptionCard({
       accessibilityLabel={`Description card: ${card.text}. Press and hold, then drag onto a term.`}
       {...panResponder.panHandlers}
     >
+      {/*
+        Keep the card face mounted while dragging and only make it invisible.
+        Removing the view under the finger makes Android stop sending moves,
+        which froze the drag right after the card shrank.
+      */}
+      <PlayingCardFace text={card.text} suitIndex={suitIndex} hidden={isDragging} />
       {isDragging ? (
-        // Empty slot while the card is being dragged.
-        <Ionicons name="ellipsis-horizontal" size={iconSize.lg} color={colors.border} />
-      ) : (
-        <PlayingCardFace text={card.text} suitIndex={suitIndex} />
-      )}
+        // Empty-slot marker drawn on top while the card is being dragged.
+        <View pointerEvents="none" style={styles.placeholderMark}>
+          <Ionicons name="ellipsis-horizontal" size={iconSize.lg} color={colors.border} />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 /** Playing-card front: suit in two corners, a faint suit in the middle, the description on top. */
-function PlayingCardFace({ text, suitIndex }: { text: string; suitIndex: number }) {
+function PlayingCardFace({
+  text,
+  suitIndex,
+  hidden = false,
+}: {
+  text: string;
+  suitIndex: number;
+  /** Invisible but still mounted (used while the card is being dragged). */
+  hidden?: boolean;
+}) {
   const suit = getSuit(suitIndex);
+  const hide = hidden && styles.hidden;
   return (
     <>
-      <Text style={[styles.watermark, { color: suit.color }]} accessible={false}>
+      <Text style={[styles.watermark, { color: suit.color }, hide]} accessible={false}>
         {suit.symbol}
       </Text>
-      <Text style={[styles.corner, styles.cornerTop, { color: suit.color }]} accessible={false}>
+      <Text style={[styles.corner, styles.cornerTop, { color: suit.color }, hide]} accessible={false}>
         {suit.symbol}
       </Text>
-      <Text style={[styles.corner, styles.cornerBottom, { color: suit.color }]} accessible={false}>
+      <Text style={[styles.corner, styles.cornerBottom, { color: suit.color }, hide]} accessible={false}>
         {suit.symbol}
       </Text>
       {/* Very long descriptions shrink to fit instead of being cut off. */}
-      <Text style={styles.text} adjustsFontSizeToFit minimumFontScale={0.6} numberOfLines={12}>
+      <Text style={[styles.text, hide]} adjustsFontSizeToFit minimumFontScale={0.6} numberOfLines={12}>
         {text}
       </Text>
     </>
@@ -231,6 +249,18 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: colors.border,
     backgroundColor: colors.surface,
+  },
+  hidden: {
+    opacity: 0,
+  },
+  placeholderMark: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   ghost: {
     flex: 1,
